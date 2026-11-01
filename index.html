@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<title>Family Hub</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#1F4FA8">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Family Hub">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icons/favicon.png">
+<style>
+:root{--brand:#1F4FA8;--bg:#F2F4F7;--card:#FFFFFF;--ink:#18202B;--muted:#556070;--line:#D5DBE3;--danger:#B42318}
+@media (prefers-color-scheme: dark){:root{--bg:#0F1419;--card:#1A2129;--ink:#E8ECF1;--muted:#9AA5B4;--line:#2A333D;--danger:#FF8A80}}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;overflow:hidden}
+#hub{position:fixed;left:0;right:0;bottom:0;top:env(safe-area-inset-top,0px);width:100%;height:calc(100% - env(safe-area-inset-top,0px));border:0;background:var(--bg)}
+.screen{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;padding:24px max(24px, env(safe-area-inset-left,0px)) 24px max(24px, env(safe-area-inset-right,0px));z-index:2}
+#splash{background:var(--brand);color:#fff;transition:opacity .4s}
+#splash.gone{opacity:0;pointer-events:none}
+#splash img{width:112px;height:112px;border-radius:26px;box-shadow:0 10px 30px rgba(0,0,0,.25)}
+#splash h1{margin:0;font-size:26px;font-weight:800;letter-spacing:-.3px}
+#splash p{margin:0;font-size:15px;opacity:.85;text-align:center;max-width:320px}
+#splash .btns{display:none;gap:10px}
+#splash.slow .btns{display:flex}
+#splash button{border:0;border-radius:999px;padding:12px 18px;font-size:15px;font-weight:700;background:#fff;color:var(--brand);min-height:46px}
+#splash button.ghost{background:transparent;color:#fff;border:1.5px solid rgba(255,255,255,.6)}
+#setup{background:var(--bg)}
+.card{background:var(--card);border-radius:24px;padding:28px;width:100%;max-width:460px;display:flex;flex-direction:column;gap:14px;box-shadow:0 1px 3px rgba(16,24,40,.08)}
+.card img{width:72px;height:72px;border-radius:18px}
+.card h1{margin:0;font-size:24px}
+.card p{margin:0;color:var(--muted);font-size:15px;line-height:1.5}
+.card label{font-size:14px;font-weight:700;color:var(--muted)}
+.card textarea{width:100%;min-height:96px;border:1.5px solid var(--line);border-radius:14px;padding:12px;font:inherit;font-size:15px;background:var(--bg);color:var(--ink);resize:none}
+.card textarea:focus{outline:2px solid var(--brand);outline-offset:1px}
+.card button{border:0;border-radius:14px;background:var(--brand);color:#fff;font-size:17px;font-weight:700;min-height:52px}
+.err{color:var(--danger);font-weight:600;font-size:14px;min-height:1em}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<iframe id="hub" title="Family Hub" allow="clipboard-write" hidden></iframe>
+
+<div id="splash" class="screen" hidden>
+  <img src="icons/icon-512.png" alt="">
+  <h1>Family Hub</h1>
+  <p id="splash-msg">Loading…</p>
+  <div class="btns"><button id="retry" type="button">Try again</button><button id="change" class="ghost" type="button">Change link</button></div>
+</div>
+
+<div id="setup" class="screen" hidden>
+  <form class="card" id="setup-form">
+    <img src="icons/icon-192.png" alt="">
+    <h1>Connect your Family Hub</h1>
+    <p>Paste your family's Family Hub link: the one that ends in <b>?key=…</b>. You only need to do this once on each device.</p>
+    <label for="link">Family Hub link</label>
+    <textarea id="link" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec?key=…"></textarea>
+    <div class="err" id="err" role="alert"></div>
+    <button type="submit">Connect</button>
+  </form>
+</div>
+
+<script>
+var KEY = 'fh-link';
+var hub = document.getElementById('hub'), splash = document.getElementById('splash'), setup = document.getElementById('setup');
+var slowTimer = null;
+
+function saved() { try { return localStorage.getItem(KEY) || ''; } catch (e) { return ''; } }
+function save(v) { try { localStorage.setItem(KEY, v); } catch (e) {} }
+function forget() { try { localStorage.removeItem(KEY); } catch (e) {} }
+
+function valid(link) {
+  return /^https:\/\/script\.google\.com\/(a\/macros\/[^\/]+|macros)\/s\/[\w-]+\/exec\?(.*&)?key=[\w-]+/.test(link);
+}
+
+function showSetup(msg) {
+  hub.hidden = true; splash.hidden = true; setup.hidden = false;
+  document.getElementById('err').textContent = msg || '';
+  var box = document.getElementById('link'); box.value = saved();
+}
+
+function openHub(link) {
+  setup.hidden = true;
+  splash.hidden = false; splash.classList.remove('gone', 'slow');
+  document.getElementById('splash-msg').textContent = navigator.onLine === false ? 'You\'re offline. Family Hub will open when you\'re back online.' : 'Loading…';
+  hub.hidden = false;
+  hub.src = link;
+  clearTimeout(slowTimer);
+  slowTimer = setTimeout(function () {
+    splash.classList.add('slow');
+    document.getElementById('splash-msg').textContent = 'This is taking a while. Check the Wi-Fi, then try again.';
+  }, 20000);
+}
+
+hub.addEventListener('load', function () {
+  if (!hub.src) return;
+  clearTimeout(slowTimer);
+  setTimeout(function () { splash.classList.add('gone'); }, 250);
+});
+
+document.getElementById('retry').addEventListener('click', function () { openHub(saved()); });
+document.getElementById('change').addEventListener('click', function () { showSetup(); });
+window.addEventListener('online', function () { if (saved() && !splash.classList.contains('gone')) openHub(saved()); });
+
+document.getElementById('setup-form').addEventListener('submit', function (e) {
+  e.preventDefault();
+  var link = document.getElementById('link').value.trim().replace(/\s+/g, '');
+  if (!valid(link)) {
+    document.getElementById('err').textContent = 'That doesn\'t look like a Family Hub link. It should start with https://script.google.com/macros/ and end with ?key= and a code.';
+    return;
+  }
+  save(link);
+  openHub(link);
+});
+
+// Visit …/#reset to clear this device's link and paste a new one.
+if (location.hash === '#reset') { forget(); history.replaceState(null, '', location.pathname); }
+if (saved()) openHub(saved()); else showSetup();
+
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
+}
+</script>
+</body>
+</html>
