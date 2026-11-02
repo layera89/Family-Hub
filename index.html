@@ -4,7 +4,6 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Family Hub</title>
-<link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#1F4FA8">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
@@ -29,6 +28,13 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
 #splash button{border:0;border-radius:999px;padding:12px 18px;font-size:15px;font-weight:700;background:#fff;color:var(--brand);min-height:46px}
 #splash button.ghost{background:transparent;color:#fff;border:1.5px solid rgba(255,255,255,.6)}
 #setup{background:var(--bg)}
+#tip{position:fixed;left:12px;right:12px;bottom:calc(14px + env(safe-area-inset-bottom,0px));z-index:5;background:var(--card);color:var(--ink);border-radius:20px;padding:16px 18px;box-shadow:0 10px 30px rgba(0,0,0,.25);display:flex;gap:14px;align-items:center;max-width:520px;margin:0 auto}
+#tip img{width:48px;height:48px;border-radius:12px;flex-shrink:0}
+#tip b{display:block;font-size:16px;margin-bottom:2px}
+#tip span{font-size:14px;color:var(--muted);line-height:1.4}
+#tip button{border:0;border-radius:999px;padding:10px 14px;font-size:14px;font-weight:700;min-height:44px;flex-shrink:0}
+#tip .go{background:var(--brand);color:#fff}
+#tip .no{background:transparent;color:var(--muted)}
 .card{background:var(--card);border-radius:24px;padding:28px;width:100%;max-width:460px;display:flex;flex-direction:column;gap:14px;box-shadow:0 1px 3px rgba(16,24,40,.08)}
 .card img{width:72px;height:72px;border-radius:18px}
 .card h1{margin:0;font-size:24px}
@@ -49,6 +55,13 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font-family
   <h1>Family Hub</h1>
   <p id="splash-msg">Loading…</p>
   <div class="btns"><button id="retry" type="button">Try again</button><button id="change" class="ghost" type="button">Change link</button></div>
+</div>
+
+<div id="tip" hidden role="dialog" aria-label="Install Family Hub">
+  <img src="icons/icon-192.png" alt="">
+  <div style="flex:1"><b id="tip-title">Add Family Hub to your Home Screen</b><span id="tip-text"></span></div>
+  <button class="go" id="tip-go" type="button" hidden>Install</button>
+  <button class="no" id="tip-no" type="button">Not now</button>
 </div>
 
 <div id="setup" class="screen" hidden>
@@ -116,9 +129,48 @@ document.getElementById('setup-form').addEventListener('submit', function (e) {
   openHub(link);
 });
 
+var isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+var standalone = window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+
+// iPhones add the page's current address to the Home Screen, so leaving the
+// link in the address lets the new icon open straight into Family Hub.
+// Everywhere else the install manifest is used instead.
+if (!isIOS) {
+  var m = document.createElement('link'); m.rel = 'manifest'; m.href = 'manifest.webmanifest'; document.head.appendChild(m);
+}
+
+// A link arriving from the setup QR code: …/#link=<Family Hub link>
+var fromQR = '';
+if (location.hash.indexOf('#link=') === 0) {
+  try { fromQR = decodeURIComponent(location.hash.slice(6)); } catch (e) { fromQR = ''; }
+  if (valid(fromQR)) save(fromQR); else fromQR = '';
+  if (!isIOS || standalone) history.replaceState(null, '', location.pathname);
+}
+
 // Visit …/#reset to clear this device's link and paste a new one.
 if (location.hash === '#reset') { forget(); history.replaceState(null, '', location.pathname); }
 if (saved()) openHub(saved()); else showSetup();
+
+// Install tip for phones that arrived from the QR code
+var tip = document.getElementById('tip'), deferred = null;
+document.getElementById('tip-no').addEventListener('click', function () { tip.hidden = true; });
+if (fromQR && !standalone && isIOS) {
+  document.getElementById('tip-text').textContent = 'Tap the Share button, then "Add to Home Screen".';
+  tip.hidden = false;
+}
+window.addEventListener('beforeinstallprompt', function (e) {
+  e.preventDefault(); deferred = e;
+  if (standalone) return;
+  document.getElementById('tip-title').textContent = 'Install Family Hub';
+  document.getElementById('tip-text').textContent = 'Puts Family Hub on your home screen like an app.';
+  document.getElementById('tip-go').hidden = false;
+  tip.hidden = false;
+});
+document.getElementById('tip-go').addEventListener('click', function () {
+  if (!deferred) return;
+  deferred.prompt();
+  deferred.userChoice.then(function () { tip.hidden = true; deferred = null; });
+});
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });

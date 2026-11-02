@@ -1,6 +1,6 @@
 // Family Hub app shell. Keeps the front door and icon available offline;
 // the Family Hub itself always loads live from Google.
-var CACHE = 'family-hub-shell-v1';
+var CACHE = 'family-hub-shell-v2';
 var SHELL = ['./', './index.html', './manifest.webmanifest', './icons/icon-192.png', './icons/icon-512.png', './icons/apple-touch-icon.png'];
 
 self.addEventListener('install', function (e) {
